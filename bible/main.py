@@ -37,6 +37,8 @@ class Main:
             curses.init_pair(1, curses.COLOR_WHITE, -1)
             self.stdscr.bkgd(" ", curses.color_pair(1))
 
+        self._last_search = {"win": None, "query": ""}
+
         self.initialize_reader()
         self.sidebars_visible = True
         self.initialize_windows()
@@ -329,7 +331,41 @@ class Main:
                     found = self.selected_window[1].search_select(
                         query, start_at_current=True
                     )
-                    if not found:
+                    if found:
+                        self._last_search = {
+                            "win": self.selected_window[1],
+                            "query": query,
+                        }
+                    else:
+                        curses.beep()
+
+            elif key == ord("n"):
+                last = self._last_search
+                if last["query"] and last["win"] is self.selected_window[1]:
+                    if not self.selected_window[1].search_next(last["query"]):
+                        curses.beep()
+                else:
+                    # Repeat last search starting from current
+                    if last["query"]:
+                        if not self.selected_window[1].search_select(
+                            last["query"], True
+                        ):
+                            curses.beep()
+                    else:
+                        curses.beep()
+
+            elif key == ord("N"):
+                last = self._last_search
+                if last["query"] and last["win"] is self.selected_window[1]:
+                    if not self.selected_window[1].search_prev(last["query"]):
+                        curses.beep()
+                else:
+                    if last["query"]:
+                        if not self.selected_window[1].search_select(
+                            last["query"], True
+                        ):
+                            curses.beep()
+                    else:
                         curses.beep()
 
             elif key == ord("f"):

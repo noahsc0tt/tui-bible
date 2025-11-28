@@ -108,6 +108,38 @@ class ListWindow:
                 return True
         return False
 
+    def search_next(self, query):
+        if not self._item_tuples or not query:
+            return False
+        q = str(query).lower()
+        n = len(self._item_tuples)
+        start = self._selected_tuple[0]
+        for off in range(1, n + 1):
+            i = (start + off) % n
+            if q in str(self._item_tuples[i][1]).lower():
+                self._selected_tuple = self._item_tuples[i]
+                start_bound = max(0, min(i, max(0, n - self.MAX_ITEMS)))
+                self._bounds = (start_bound, start_bound + self.MAX_ITEMS)
+                self.draw()
+                return True
+        return False
+
+    def search_prev(self, query):
+        if not self._item_tuples or not query:
+            return False
+        q = str(query).lower()
+        n = len(self._item_tuples)
+        start = self._selected_tuple[0]
+        for off in range(1, n + 1):
+            i = (start - off) % n
+            if q in str(self._item_tuples[i][1]).lower():
+                self._selected_tuple = self._item_tuples[i]
+                start_bound = max(0, min(i, max(0, n - self.MAX_ITEMS)))
+                self._bounds = (start_bound, start_bound + self.MAX_ITEMS)
+                self.draw()
+                return True
+        return False
+
     def write_title(self):
         self._win.addnstr(
             0, 0, self._title.center(self._width, " "), self._width, curses.A_UNDERLINE
