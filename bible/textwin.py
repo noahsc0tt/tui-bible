@@ -61,30 +61,40 @@ class TextWindow:
             if not combined:
                 self._inner_win.addnstr(y, 0, line, max(0, w - 1))
                 continue
-            # Render with per-match highlighting by splitting
             x = 0
             last_end = 0
             for m in combined.finditer(line):
-                # write segment before match
-                seg = line[last_end : m.start()]
-                if seg:
-                    self._inner_win.addnstr(y, x, seg, max(0, w - 1 - x))
-                    x += len(seg)
-                # write match with highlight
-                match_text = m.group(0)
-                if use_colors:
-                    self._inner_win.addnstr(
-                        y, x, match_text, max(0, w - 1 - x), curses.color_pair(2)
-                    )
-                else:
-                    self._inner_win.addnstr(y, x, f"[{match_text}]", max(0, w - 1 - x))
-                    x += 2  # account for brackets
-                x += len(match_text)
-                last_end = m.end()
                 if x >= w - 1:
                     break
-            # write remainder
+                # segment before match
+                seg = line[last_end : m.start()]
+                if seg:
+                    avail = max(0, w - 1 - x)
+                    if avail > 0:
+                        self._inner_win.addnstr(y, x, seg[:avail], avail)
+                        x += min(len(seg), avail)
+                if x >= w - 1:
+                    break
+                # matched text
+                match_text = m.group(0)
+                avail = max(0, w - 1 - x)
+                if avail <= 0:
+                    break
+                if use_colors:
+                    self._inner_win.addnstr(
+                        y, x, match_text[:avail], avail, curses.color_pair(2)
+                    )
+                    x += min(len(match_text), avail)
+                else:
+                    # bracketed fallback may exceed; clip carefully
+                    bracketed = f"[{match_text}]"
+                    self._inner_win.addnstr(y, x, bracketed[:avail], avail)
+                    x += min(len(bracketed), avail)
+                last_end = m.end()
+            # remainder
             if last_end < len(line) and x < w - 1:
                 rem = line[last_end:]
-                self._inner_win.addnstr(y, x, rem, max(0, w - 1 - x))
+                avail = max(0, w - 1 - x)
+                if avail > 0:
+                    self._inner_win.addnstr(y, x, rem[:avail], avail)
         self._inner_win.refresh()

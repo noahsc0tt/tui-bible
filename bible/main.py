@@ -48,6 +48,7 @@ class Main:
         self._grep_override_text = None
         self._grep_override_title = None
         self._grep_results = []  # list of (translation, book, chapter, verse, snippet)
+        self._grep_raw_lines = []  # raw grep lines with filenames
         self._grep_index = -1
 
         self.initialize_reader()
@@ -276,15 +277,18 @@ class Main:
         except Exception:
             verse_int = 1
 
-        text_title = " {0} {1}:{3} [{2}]".format(
-            book_name, str(chapter_name[0]), trans_name, verse_int
-        )
+        # Build title with grep indicator left of verse number
+        grep_indicator = ""
         if self._grep_results and self._grep_index >= 0:
             term = self._last_grep or "grep"
-            # Truncate very long term for title readability
             if len(term) > 20:
                 term = term[:20] + "…"
-            text_title += f" ({term} {self._grep_index + 1}/{len(self._grep_results)})"
+            grep_indicator = (
+                f" ({term} {self._grep_index + 1}/{len(self._grep_results)})"
+            )
+        text_title = " {0} {1}{gi}:{3} [{2}]".format(
+            book_name, str(chapter_name[0]), trans_name, verse_int, gi=grep_indicator
+        )
 
         raw_text = self.reader.get_chapter_text(
             self.books_win.get_selection_tuple()[1],
@@ -441,16 +445,33 @@ class Main:
                 continue
         self._grep_results = structured
         self._grep_index = 0 if structured else -1
+        self._grep_raw_lines = results_lines
         scope_label = ""
         if scope_translation:
             scope_label = f"[{scope_translation}]"
         elif scope_book:
             scope_label = f"[{scope_book}]"
         if results_lines:
-            text = "\n".join(results_lines[: curses.LINES - 2])
+            # Build a formatted occurrences list from structured results
+            formatted_lines = []
+            for translation, book, chapter, verse, snippet in structured:
+                cleaned = re.sub(r"<[^>]+>", "", snippet)
+                line = f"{translation} {book} {chapter}:{verse} — {cleaned}"
+                formatted_lines.append(line)
+            if not formatted_lines:
+                formatted_lines = results_lines
+            # Wrap lines to text window width
+            wrap_width = max(1, self.text_width - 3)
+            wrapped = []
+            for line in formatted_lines:
+                for wl in wrap(line, width=wrap_width):
+                    wrapped.append(wl)
+                wrapped.append("")
+            text = "\n".join(wrapped) if wrapped else "\n".join(formatted_lines)
             self._grep_override_text = text
+
             self._grep_override_title = (
-                f" GREP {scope_label}/{pattern}/ ({len(results_lines)})"
+                f" GREP {scope_label}/{pattern}/ ({len(formatted_lines)})"
             )
             self._last_grep = pattern
             if record_history:
@@ -552,30 +573,52 @@ class Main:
                         else:
                             curses.beep()
 
-            elif key == ord("R"):
-                # Redisplay raw grep list if last grep available
-                if self._last_grep:
-                    # Reconstruct raw list view from existing structured results (loss of original line numbers if not stored)
-                    if self._grep_results:
-                        lines = []
-                        for (
-                            translation,
-                            book,
-                            chapter,
-                            verse,
-                            snippet,
-                        ) in self._grep_results:
-                            lines.append(
-                                f"{translation}:{book} {chapter}:{verse} {snippet}"
-                            )
-                        text = "\n".join(lines[: curses.LINES - 2])
-                        self._grep_override_text = text
-                        self._grep_override_title = (
-                            f" GREP /{self._last_grep}/ ({len(self._grep_results)})"
+            elif key == ord("r"):
+                # Rerun last grep scoped by current column, then show formatted results menu
+                scope_translation = None
+                scope_book = None
+                if self.selected_window[1] is self.translations_win:
+                    scope_translation = self.translations_win.get_selection_tuple()[1]
+                elif self.selected_window[1] is self.books_win:
+                    scope_book = self.books_win.get_selection_tuple()[1]
+                pattern = self._last_grep
+                if not pattern and self._grep_history:
+                    hist = self._grep_history[-1]
+                    pattern = hist.get("pattern")
+                    scope_translation = hist.get("scope_translation", scope_translation)
+                    scope_book = hist.get("scope_book", scope_book)
+                if pattern:
+                    self._run_grep(
+                        pattern, scope_translation, scope_book, record_history=False
+                    )
+                    formatted_lines = []
+                    for (
+                        translation,
+                        book,
+                        chapter,
+                        verse,
+                        snippet,
+                    ) in self._grep_results:
+                        cleaned = re.sub(r"<[^>]+>", "", snippet)
+                        formatted_lines.append(
+                            f"{translation} {book} {chapter}:{verse} — {cleaned}"
                         )
-                    else:
-                        self._grep_override_text = "No matches"
-                        self._grep_override_title = f" GREP /{self._last_grep}/ (0)"
+                    wrap_width = max(1, self.text_width - 3)
+                    wrapped = []
+                    for line in formatted_lines:
+                        for wl in wrap(line, width=wrap_width):
+                            wrapped.append(wl)
+                        wrapped.append("")
+                    text = "\n".join(wrapped) if wrapped else "\n".join(formatted_lines)
+                    self._grep_override_text = text
+                    title_term = pattern
+                    self._grep_override_title = (
+                        f" GREP /{title_term}/ ({len(formatted_lines)})"
+                    )
+                else:
+                    curses.beep()
+                    self._grep_override_text = "No matches"
+                    self._grep_override_title = " GREP RESULTS (0)"
 
             elif key == 27:  # ESC clears search or grep view
                 # Clear list search state
@@ -612,7 +655,7 @@ class Main:
                 else:
                     curses.beep()  # empty pattern
 
-            elif key == ord(","):
+            elif key == ord("K"):
                 # Previous grep in history
                 if self._grep_history:
                     self._grep_history_idx = (
@@ -627,7 +670,7 @@ class Main:
                         item.get("scope_book"),
                         record_history=False,
                     )
-            elif key == ord("."):
+            elif key == ord("J"):
                 # Next grep in history
                 if self._grep_history:
                     self._grep_history_idx = (
