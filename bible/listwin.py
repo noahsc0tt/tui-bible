@@ -3,7 +3,6 @@ import curses
 
 class ListWindow:
     def __init__(self, win, title, item_tuples, width):
-
         self.MAX_ITEMS = curses.LINES - 2
 
         self._win = win
@@ -57,10 +56,11 @@ class ListWindow:
 
     def draw(self):
         self._win.clear()
+        if curses.has_colors():
+            self._win.bkgd(" ", curses.color_pair(1))
         self.write_title()
 
-        for (i, val) in self._item_tuples[self._bounds[0]: self._bounds[1]]:
-
+        for i, val in self._item_tuples[self._bounds[0] : self._bounds[1]]:
             y = 1 + i - self._bounds[0]
             str_len = self._width - 2
             string = str(val).ljust(str_len)

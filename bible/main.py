@@ -28,6 +28,13 @@ class Main:
 
         self.stdscr.clear()
 
+        # Initialize colors and use terminal default background
+        if curses.has_colors():
+            curses.start_color()
+            curses.use_default_colors()
+            curses.init_pair(1, curses.COLOR_WHITE, -1)
+            self.stdscr.bkgd(" ", curses.color_pair(1))
+
         self.initialize_reader()
         self.initialize_windows()
         self.initialize_selections()
