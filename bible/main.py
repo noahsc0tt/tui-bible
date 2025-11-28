@@ -213,7 +213,24 @@ class Main:
             >= min_text_fraction
         )
         if sidebars_fit:
-            start_x = total_sidebar_width
+            # Recreate all sidebar windows to avoid stale narrow-mode hidden windows
+            start_x = 0
+            self.translations_win._win = self.stdscr.derwin(
+                curses.LINES, TRANSLATIONS_WIDTH, 0, start_x
+            )
+            start_x += TRANSLATIONS_WIDTH
+            self.books_win._win = self.stdscr.derwin(
+                curses.LINES, BOOKS_WIDTH, 0, start_x
+            )
+            start_x += BOOKS_WIDTH
+            self.chapters_win._win = self.stdscr.derwin(
+                curses.LINES, CHAPTERS_WIDTH, 0, start_x
+            )
+            start_x += CHAPTERS_WIDTH
+            self.verses_win._win = self.stdscr.derwin(
+                curses.LINES, VERSES_WIDTH, 0, start_x
+            )
+            start_x += VERSES_WIDTH
             self.text_width = available_cols - start_x
             self.text_win = TextWindow(
                 self.stdscr.derwin(curses.LINES, self.text_width, 0, start_x),
@@ -574,6 +591,10 @@ class Main:
 
             elif key == curses.KEY_RIGHT or key == ord("l"):
                 self.increment_window(1)
+            elif key == curses.KEY_RESIZE:
+                curses.update_lines_cols()
+                self.layout_windows()
+                self.update_text()
 
             elif key == ord("g"):
                 self.selected_window[1].select_first()

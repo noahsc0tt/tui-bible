@@ -32,6 +32,15 @@ class ListWindow:
         self._active = is_active
         self.draw()
 
+    def resize(self, width):
+        # Adjust width dynamically (used on terminal resize)
+        self._width = width
+        try:
+            self._win = curses.newwin(curses.LINES, width, 0, self._win.getbegyx()[1])
+        except Exception:
+            pass
+        self.draw()
+
     def get_selection_tuple(self):
         return self._selected_tuple
 
