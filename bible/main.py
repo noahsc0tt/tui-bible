@@ -438,7 +438,7 @@ class Main:
         scope_translation=None,
         scope_book=None,
         scope_chapter=None,
-        scope_verse=None,
+        all=False,
         record_history=False,
     ):
         # Perform grep across translation XML files (with optional scope), map verses
@@ -449,84 +449,101 @@ class Main:
         chapter_pattern = re.compile(r"<chapter[^>]*?(?:number|n)=[\"'](\d+)[\"']")
         book_pattern = re.compile(r"<book[^>]*?(?:number|n)=[\"'](\d+)[\"']")
         scoped_book_num = None
+        scoped_chapter_num = None
+        if all:
+            # Recursively scan the entire translations directory (raw grep-style)
+            try:
+                for root, dirs, files in os.walk(base_dir):
+                    # Skip VCS/internal dirs
+                    dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
+                    for fname in files:
+                        fpath = Path(root) / fname
+                        try:
+                            with open(
+                                fpath, "r", encoding="utf-8", errors="ignore"
+                            ) as rf:
+                                for lno, line in enumerate(rf, 1):
+                                    if re.search(pattern, line, re.IGNORECASE):
+                                        rel = str(fpath.relative_to(base_dir))
+                                        results_lines.append(
+                                            f"{rel}:{lno}: {line.rstrip()}"
+                                        )
+                        except Exception:
+                            # Ignore unreadable files
+                            continue
+            except Exception:
+                pass
+            # Do not attempt to build structured results for raw grep; navigation (n/N) disabled
+            # The existing XML scan loop below is inert due to the all-guard, and the formatter
+            # at the end of this function will render results_lines as-is.
         if scope_book:
             try:
                 scoped_book_num = BOOK_ORDER.index(scope_book) + 1
             except Exception:
                 scoped_book_num = None
-        scoped_chapter_num = None
         if scope_chapter:
             try:
                 scoped_chapter_num = int(scope_chapter)
             except Exception:
                 scoped_chapter_num = None
-        # Apply verse scope if provided
-        scoped_verse_num = None
-        if scope_verse:
-            try:
-                scoped_verse_num = int(scope_verse)
-            except Exception:
-                scoped_verse_num = None
-        for xmlfile in sorted(base_dir.glob("*.xml")):
-            translation = xmlfile.stem
-            if scope_translation and translation != scope_translation:
-                continue
-            try:
-                with open(xmlfile, "r", encoding="utf-8", errors="ignore") as f:
-                    current_book_num = None
-                    current_chapter_num = None
-                    current_verse_num = None
-                    for lno, line in enumerate(f, 1):
-                        mbook = book_pattern.search(line)
-                        if mbook:
-                            current_book_num = int(mbook.group(1))
-                        mchap = chapter_pattern.search(line)
-                        if mchap:
-                            current_chapter_num = int(mchap.group(1))
-                        mverse = verse_pattern.search(line)
-                        if mverse:
-                            current_verse_num = int(mverse.group(1))
-                        # Apply scope filters strictly
-                        if (
-                            scoped_book_num is not None
-                            and current_book_num != scoped_book_num
-                        ):
-                            continue
-                        if (
-                            scoped_chapter_num is not None
-                            and current_chapter_num != scoped_chapter_num
-                        ):
-                            continue
-                        if (
-                            scoped_verse_num is not None
-                            and current_verse_num != scoped_verse_num
-                        ):
-                            continue
-                        if re.search(pattern, line, re.IGNORECASE):
-                            verse_num = current_verse_num if current_verse_num else 1
-                            book_name = None
+        if not all:
+            for xmlfile in sorted(base_dir.glob("*.xml")):
+                translation = xmlfile.stem
+                if scope_translation and translation != scope_translation:
+                    continue
+                try:
+                    with open(xmlfile, "r", encoding="utf-8", errors="ignore") as f:
+                        current_book_num = None
+                        current_chapter_num = None
+                        current_verse_num = None
+                        for lno, line in enumerate(f, 1):
+                            mbook = book_pattern.search(line)
+                            if mbook:
+                                current_book_num = int(mbook.group(1))
+                            mchap = chapter_pattern.search(line)
+                            if mchap:
+                                current_chapter_num = int(mchap.group(1))
+                            mverse = verse_pattern.search(line)
+                            if mverse:
+                                current_verse_num = int(mverse.group(1))
+                            # Apply scope filters strictly
                             if (
-                                current_book_num is not None
-                                and 1 <= current_book_num <= len(BOOK_ORDER)
+                                scoped_book_num is not None
+                                and current_book_num != scoped_book_num
                             ):
-                                book_name = BOOK_ORDER[current_book_num - 1]
-                            snippet = line.strip()
-                            cleaned = re.sub(r"<[^>]+>", "", snippet)
-                            results_lines.append(
-                                f"{translation} {book_name or ''} {current_chapter_num or ''}:{verse_num} — {cleaned}"
-                            )
-                            if book_name and current_chapter_num:
-                                structured.append(
-                                    (
-                                        translation,
-                                        book_name,
-                                        str(current_chapter_num),
-                                        str(verse_num),
-                                        cleaned,
-                                    )
+                                continue
+                            if (
+                                scoped_chapter_num is not None
+                                and current_chapter_num != scoped_chapter_num
+                            ):
+                                continue
+                            if re.search(pattern, line, re.IGNORECASE):
+                                verse_num = (
+                                    current_verse_num if current_verse_num else 1
                                 )
-            except Exception:
-                continue
+                                book_name = None
+                                if (
+                                    current_book_num is not None
+                                    and 1 <= current_book_num <= len(BOOK_ORDER)
+                                ):
+                                    book_name = BOOK_ORDER[current_book_num - 1]
+                                snippet = line.strip()
+                                cleaned = re.sub(r"<[^>]+>", "", snippet)
+                                results_lines.append(
+                                    f"{translation} {book_name or ''} {current_chapter_num or ''}:{verse_num} — {cleaned}"
+                                )
+                                if book_name and current_chapter_num:
+                                    structured.append(
+                                        (
+                                            translation,
+                                            book_name,
+                                            str(current_chapter_num),
+                                            str(verse_num),
+                                            cleaned,
+                                        )
+                                    )
+                except Exception:
+                    continue
         self._grep_results = structured
         self._grep_index = 0 if structured else -1
         self._grep_raw_lines = results_lines
@@ -537,6 +554,8 @@ class Main:
             scope_label = f"[{scope_book}]"
         elif scoped_chapter_num is not None:
             scope_label = f"[Chapter {scoped_chapter_num}]"
+        else:
+            scope_label = "[ALL]"
         # Verse label removed (verse-scoped search disabled)
         if results_lines:
             # Use already-cleaned results_lines for display
@@ -560,7 +579,7 @@ class Main:
                     "scope_translation": scope_translation,
                     "scope_book": scope_book,
                     "scope_chapter": scoped_chapter_num,
-                    "scope_verse": scoped_verse_num,
+                    "all": all,
                 }
                 self._grep_history = [e for e in self._grep_history if e != entry]
                 self._grep_history.append(entry)
@@ -765,39 +784,12 @@ class Main:
                             curses.beep()
 
             elif key == ord("r"):
-                # Rerun last grep with same mapping as initial '/'
-                scope_translation = None
-                scope_book = None
-                if self.selected_window[1] is self.books_win:
-                    scope_translation = self.translations_win.get_selection_tuple()[1]
-                elif self.selected_window[1] is self.chapters_win:
-                    scope_book = self.books_win.get_selection_tuple()[1]
-                elif self.selected_window[1] is self.verses_win:
-                    scope_book = self.books_win.get_selection_tuple()[1]
+                # Open grep results pane for last-run pattern
                 pattern = self._last_grep
                 if not pattern and self._grep_history:
                     hist = self._grep_history[-1]
                     pattern = hist.get("pattern")
-                    scope_translation = hist.get("scope_translation", scope_translation)
-                    scope_book = hist.get("scope_book", scope_book)
-                if pattern:
-                    # Include current book/chapter/verse scope if those columns are active
-                    scope_chapter = None
-                    scope_verse = None
-                    if self.selected_window[1] is self.chapters_win:
-                        scope_chapter = (
-                            None  # only book scope for chapters column rerun
-                        )
-                    elif self.selected_window[1] is self.verses_win:
-                        scope_chapter = self.chapters_win.get_selection_tuple()[1]
-                    self._run_grep(
-                        pattern,
-                        scope_translation,
-                        scope_book,
-                        scope_chapter,
-                        scope_verse,
-                        record_history=False,
-                    )
+                if self._grep_results:
                     formatted_lines = []
                     for (
                         translation,
@@ -818,14 +810,12 @@ class Main:
                         wrapped.append("")
                     text = "\n".join(wrapped) if wrapped else "\n".join(formatted_lines)
                     self._grep_override_text = text
-                    title_term = pattern
+                    title_term = pattern or "grep"
                     self._grep_override_title = (
                         f" GREP /{title_term}/ ({len(formatted_lines)})"
                     )
                 else:
                     curses.beep()
-                    self._grep_override_text = "No matches"
-                    self._grep_override_title = " GREP RESULTS (0)"
 
             elif key == 27:  # ESC clears search or grep view
                 # Clear list search state
@@ -842,20 +832,18 @@ class Main:
                 self._grep_history_idx = -1
 
             elif key == ord("/"):
+                # Prompt for grep pattern, run search, jump to first match without opening results pane
                 pattern = self._prompt_input_cancelable("Grep: ")
                 if pattern is None:
                     pass  # aborted
                 elif pattern:
-                    # New scope mapping:
-                    # translations column -> grep ALL (no scope)
-                    # books column -> scope_translation only
-                    # chapters column -> scope_book only (all translations)
-                    # verses column -> scope_book + scope_chapter
                     scope_translation = None
                     scope_book = None
                     scope_chapter = None
-                    scope_verse = None
-                    if self.selected_window[1] is self.books_win:
+                    all = False
+                    if self.selected_window[1] is self.translations_win:
+                        all = True
+                    elif self.selected_window[1] is self.books_win:
                         scope_translation = self.translations_win.get_selection_tuple()[
                             1
                         ]
@@ -864,14 +852,21 @@ class Main:
                     elif self.selected_window[1] is self.verses_win:
                         scope_book = self.books_win.get_selection_tuple()[1]
                         scope_chapter = self.chapters_win.get_selection_tuple()[1]
+                    # Run grep (records history); _run_grep populates override pane; clear it right after
                     self._run_grep(
                         pattern,
                         scope_translation,
                         scope_book,
                         scope_chapter,
-                        scope_verse,
+                        all,
                         record_history=True,
                     )
+                    # Clear override pane so verses view remains
+                    self._grep_override_text = None
+                    self._grep_override_title = None
+                    # Ensure at first result
+                    if self._grep_results and self._grep_index >= 0:
+                        self._jump_to_grep_index(self._grep_index)
                 else:
                     curses.beep()  # empty pattern
 
@@ -889,33 +884,38 @@ class Main:
                         item.get("scope_translation"),
                         item.get("scope_book"),
                         item.get("scope_chapter"),
-                        item.get("scope_verse"),
+                        item.get("all", False),
                         record_history=False,
                     )
-                    # Show formatted, wrapped list for current results
-                    formatted_lines = []
-                    for (
-                        translation,
-                        book,
-                        chapter,
-                        verse,
-                        snippet,
-                    ) in self._grep_results:
-                        cleaned = re.sub(r"<[^>]+>", "", snippet)
-                        formatted_lines.append(
-                            f"{translation} {book} {chapter}:{verse} — {cleaned}"
+                    # If structured verse results exist, reformat; otherwise keep raw lines from _run_grep
+                    if self._grep_results:
+                        formatted_lines = []
+                        for (
+                            translation,
+                            book,
+                            chapter,
+                            verse,
+                            snippet,
+                        ) in self._grep_results:
+                            cleaned = re.sub(r"<[^>]+>", "", snippet)
+                            formatted_lines.append(
+                                f"{translation} {book} {chapter}:{verse} — {cleaned}"
+                            )
+                        wrap_width = max(1, self.text_width - 3)
+                        wrapped = []
+                        for line in formatted_lines:
+                            for wl in wrap(line, width=wrap_width):
+                                wrapped.append(wl)
+                            wrapped.append("")
+                        text = (
+                            "\n".join(wrapped)
+                            if wrapped
+                            else "\n".join(formatted_lines)
                         )
-                    wrap_width = max(1, self.text_width - 3)
-                    wrapped = []
-                    for line in formatted_lines:
-                        for wl in wrap(line, width=wrap_width):
-                            wrapped.append(wl)
-                        wrapped.append("")
-                    text = "\n".join(wrapped) if wrapped else "\n".join(formatted_lines)
-                    self._grep_override_text = text
-                    self._grep_override_title = (
-                        f" GREP /{item['pattern']}/ ({len(formatted_lines)})"
-                    )
+                        self._grep_override_text = text
+                        self._grep_override_title = (
+                            f" GREP /{item['pattern']}/ ({len(formatted_lines)})"
+                        )
             elif key == ord("J"):
                 # Next grep in history
                 if self._grep_history:
@@ -930,33 +930,38 @@ class Main:
                         item.get("scope_translation"),
                         item.get("scope_book"),
                         item.get("scope_chapter"),
-                        item.get("scope_verse"),
+                        item.get("all", False),
                         record_history=False,
                     )
-                    # Show formatted, wrapped list for current results
-                    formatted_lines = []
-                    for (
-                        translation,
-                        book,
-                        chapter,
-                        verse,
-                        snippet,
-                    ) in self._grep_results:
-                        cleaned = re.sub(r"<[^>]+>", "", snippet)
-                        formatted_lines.append(
-                            f"{translation} {book} {chapter}:{verse} — {cleaned}"
+                    # If structured verse results exist, reformat; otherwise keep raw lines from _run_grep
+                    if self._grep_results:
+                        formatted_lines = []
+                        for (
+                            translation,
+                            book,
+                            chapter,
+                            verse,
+                            snippet,
+                        ) in self._grep_results:
+                            cleaned = re.sub(r"<[^>]+>", "", snippet)
+                            formatted_lines.append(
+                                f"{translation} {book} {chapter}:{verse} — {cleaned}"
+                            )
+                        wrap_width = max(1, self.text_width - 3)
+                        wrapped = []
+                        for line in formatted_lines:
+                            for wl in wrap(line, width=wrap_width):
+                                wrapped.append(wl)
+                            wrapped.append("")
+                        text = (
+                            "\n".join(wrapped)
+                            if wrapped
+                            else "\n".join(formatted_lines)
                         )
-                    wrap_width = max(1, self.text_width - 3)
-                    wrapped = []
-                    for line in formatted_lines:
-                        for wl in wrap(line, width=wrap_width):
-                            wrapped.append(wl)
-                        wrapped.append("")
-                    text = "\n".join(wrapped) if wrapped else "\n".join(formatted_lines)
-                    self._grep_override_text = text
-                    self._grep_override_title = (
-                        f" GREP /{item['pattern']}/ ({len(formatted_lines)})"
-                    )
+                        self._grep_override_text = text
+                        self._grep_override_title = (
+                            f" GREP /{item['pattern']}/ ({len(formatted_lines)})"
+                        )
 
             elif key == ord("f"):
                 if self.selected_window[1] is not self.verses_win:
