@@ -48,7 +48,15 @@ class Main:
 
     def initialize_reader(self):
         self.reader = Reader()
-        self.reader.set_root("AMP")
+        translations = self.reader.get_translations()
+        default = (
+            "BSB"
+            if "BSB" in translations
+            else (translations[0] if translations else None)
+        )
+        if not default:
+            raise RuntimeError("No supported translations found")
+        self.reader.set_root(default)
 
     def initialize_windows(self):
         # Create sidebar windows (left columns)
@@ -215,6 +223,9 @@ class Main:
 
             elif key == ord("g"):
                 self.selected_window[1].select_first()
+
+            elif key == ord("G"):
+                self.selected_window[1].select_last()
 
             elif key == ord("s"):
                 # Toggle sidebar visibility
