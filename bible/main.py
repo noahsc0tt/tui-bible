@@ -4,6 +4,7 @@ import curses
 
 from hyphen import Hyphenator
 from textwrap import wrap
+import re
 
 from .reader import Reader
 from .textwin import TextWindow
@@ -41,7 +42,6 @@ class Main:
         self.reader.set_root("AMP")
 
     def initialize_windows(self):
-
         start_x = 0
         self.translations_win = ListWindow(
             self.stdscr.derwin(curses.LINES, TRANSLATIONS_WIDTH, start_x, 0),
@@ -119,18 +119,22 @@ class Main:
             self.chapters_win.get_selection_tuple()[1],
             verse_start=verse,
         )
-        text = "\n".join(
-            wrap(
-                raw_text,
-                width=self.text_width - 3,
-            )[0: curses.LINES - 2]
-        )
+        # Split into verses keeping the verse markers like "(1)"
+        verses = re.split(r"(?=\(\d+\)\s*)", raw_text)
+        lines = []
+        for v in verses:
+            if not v.strip():
+                continue
+            wrapped = wrap(v, width=self.text_width - 3)
+            lines.extend(wrapped)
+            lines.append("")  # blank line between verses
+        text = "\n".join(lines[0 : curses.LINES - 2])
 
         self.text_win.update_text_title(text_title)
         self.text_win.update_text(text)
 
     def deactivate_all_windows(self):
-        for (i, win) in self.windows_tuples:
+        for i, win in self.windows_tuples:
             win.set_active(False)
 
     def increment_window(self, i):
@@ -146,22 +150,21 @@ class Main:
     def start_input_loop(self):
         key = None
         while key != ord("q"):
-
             key = self.stdscr.getch()
 
-            if key == curses.KEY_UP or key == ord('k'):
+            if key == curses.KEY_UP or key == ord("k"):
                 self.selected_window[1].increment_selection(-1)
 
-            elif key == curses.KEY_DOWN or key == ord('j'):
+            elif key == curses.KEY_DOWN or key == ord("j"):
                 self.selected_window[1].increment_selection(1)
 
-            elif key == curses.KEY_LEFT or key == ord('h'):
+            elif key == curses.KEY_LEFT or key == ord("h"):
                 self.increment_window(-1)
 
-            elif key == curses.KEY_RIGHT or key == ord('l'):
+            elif key == curses.KEY_RIGHT or key == ord("l"):
                 self.increment_window(1)
 
-            elif key == ord('g'):
+            elif key == ord("g"):
                 self.selected_window[1].select_first()
 
             self.update_selections()
