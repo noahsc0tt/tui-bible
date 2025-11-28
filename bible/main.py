@@ -31,7 +31,6 @@ class Main:
 
         self.stdscr.clear()
 
-        # Initialize colors and use terminal default background
         if curses.has_colors():
             curses.start_color()
             curses.use_default_colors()
@@ -42,7 +41,6 @@ class Main:
         self.sidebars_visible = True
         self.initialize_windows()
         self.initialize_selections()
-        # Apply any previously saved position before first layout/update
         self._apply_loaded_position()
         self.layout_windows()
 
@@ -64,7 +62,6 @@ class Main:
         translations = self.reader.get_translations()
         trans = st.get("translation")
         if trans in translations:
-            # Set root early so books/chapters reflect the translation
             self.reader.set_root(trans)
             self._loaded_state = {
                 "translation": trans,
@@ -80,22 +77,17 @@ class Main:
         if not st:
             return
         try:
-            # translation
             self.translations_win.select_value(st["translation"])
             self.update_selections()
-            # book
             if st.get("book"):
                 self.books_win.select_value(st["book"])
                 self.update_selections()
-            # chapter
             if st.get("chapter"):
                 self.chapters_win.select_value(st["chapter"])
                 self.update_selections()
-            # verse
             if st.get("verse"):
                 self.verses_win.select_value(st["verse"])
         except Exception:
-            # If anything goes wrong, fall back to defaults
             pass
 
     def _save_position(self):
@@ -111,6 +103,26 @@ class Main:
         except Exception:
             pass
 
+    def _prompt_input(self, prompt_text):
+        h, w = self.stdscr.getmaxyx()
+        try:
+            curses.echo()
+            self.stdscr.move(h - 1, 0)
+            self.stdscr.clrtoeol()
+            self.stdscr.addnstr(h - 1, 0, prompt_text, max(0, w - 1))
+            self.stdscr.refresh()
+            s = self.stdscr.getstr(
+                h - 1, len(prompt_text), max(1, w - len(prompt_text) - 1)
+            )
+            return s.decode("utf-8").strip()
+        except Exception:
+            return ""
+        finally:
+            curses.noecho()
+            self.stdscr.move(h - 1, 0)
+            self.stdscr.clrtoeol()
+            self.stdscr.refresh()
+
     def initialize_reader(self):
         self.reader = Reader()
         translations = self.reader.get_translations()
@@ -125,7 +137,6 @@ class Main:
         self._load_last_position()
 
     def initialize_windows(self):
-        # Create sidebar windows (left columns)
         start_x = 0
         self.translations_win = ListWindow(
             self.stdscr.derwin(curses.LINES, TRANSLATIONS_WIDTH, start_x, 0),
@@ -158,7 +169,6 @@ class Main:
             VERSES_WIDTH,
         )
 
-        # Create text window; actual position/size set by layout_windows()
         self.text_width = curses.COLS
         self.text_win = TextWindow(
             self.stdscr.derwin(curses.LINES, self.text_width, 0, 0),
@@ -166,16 +176,13 @@ class Main:
         )
 
     def layout_windows(self):
-        # Compute layout based on sidebar visibility
         if self.sidebars_visible:
             start_x = TRANSLATIONS_WIDTH + BOOKS_WIDTH + CHAPTERS_WIDTH + VERSES_WIDTH
             self.text_width = curses.COLS - start_x
-            # Recreate text window with new geometry
             self.text_win = TextWindow(
                 self.stdscr.derwin(curses.LINES, self.text_width, 0, start_x),
                 self.text_width,
             )
-            # Ensure sidebars are redrawn and active state restored
             self.deactivate_all_windows()
             self.selected_window[1].set_active(True)
             for win in [
@@ -186,13 +193,11 @@ class Main:
             ]:
                 win.draw()
         else:
-            # Hide sidebars visually by covering them with a full-width text window
             self.text_width = curses.COLS
             self.text_win = TextWindow(
                 self.stdscr.derwin(curses.LINES, self.text_width, 0, 0),
                 self.text_width,
             )
-            # Deactivate and clear sidebars so they don't show through
             self.deactivate_all_windows()
             for win in [
                 self.translations_win,
@@ -218,31 +223,32 @@ class Main:
         book = self.books_win.get_selection_tuple()[1]
 
         chapter_tuples = make_enumeration(self.reader.get_chapters(book))
-
         self.chapters_win.set_selection_tuples(chapter_tuples)
 
         chapter = self.chapters_win.get_selection_tuple()[1]
 
         verses_tuples = make_enumeration(self.reader.get_verses(book, chapter))
-
         self.verses_win.set_selection_tuples(verses_tuples)
 
     def update_text(self):
         trans_name = self.translations_win.get_selection_tuple()[1]
         book_name = self.books_win.get_selection_tuple()[1]
         chapter_name = (self.chapters_win.get_selection_tuple()[1],)
-        verse = self.verses_win.get_selection_tuple()[1]
+        verse_str = self.verses_win.get_selection_tuple()[1]
+        try:
+            verse_int = int(verse_str) if verse_str else 1
+        except Exception:
+            verse_int = 1
 
         text_title = " {0} {1}:{3} [{2}]".format(
-            book_name, str(chapter_name[0]), trans_name, verse
+            book_name, str(chapter_name[0]), trans_name, verse_int
         )
 
         raw_text = self.reader.get_chapter_text(
             self.books_win.get_selection_tuple()[1],
             self.chapters_win.get_selection_tuple()[1],
-            verse_start=verse,
+            verse_start=verse_int,
         )
-        # Split into verses keeping the verse markers like "(1)"
         verses = re.split(r"(?=\(\d+\)\s*)", raw_text)
         lines = []
         for v in verses:
@@ -250,10 +256,9 @@ class Main:
                 continue
             wrapped = wrap(v, width=self.text_width - 3)
             lines.extend(wrapped)
-            lines.append("")  # blank line between verses
+            lines.append("")
         text = "\n".join(lines[0 : curses.LINES - 2])
 
-        # Add hint for Frogmouth when on BSB
         hint = ""
         if trans_name == "BSB":
             hint = "\n[Enter]: open current chapter in Frogmouth"
@@ -280,19 +285,16 @@ class Main:
             return
         book = self.books_win.get_selection_tuple()[1]
         chapter = self.chapters_win.get_selection_tuple()[1]
-        # Path: markdown/BSB/<Book>/<chapter>.md (fallback to book index)
         base = Path(__file__).parent / "markdown" / "BSB" / book
         md = base / f"{chapter}.md"
         if not md.exists():
             md = base / "index.md"
         if not md.exists():
             return
-        # Temporarily leave curses to run frogmouth
         curses.endwin()
         try:
             os.system(f"frogmouth '{md}'")
         finally:
-            # Reinitialize curses screen after returning
             self.stdscr.refresh()
             self.layout_windows()
             self.update_selections()
@@ -321,11 +323,18 @@ class Main:
             elif key == ord("G"):
                 self.selected_window[1].select_last()
 
+            elif key == ord("i"):
+                query = self._prompt_input("Search: ")
+                if query:
+                    found = self.selected_window[1].search_select(
+                        query, start_at_current=True
+                    )
+                    if not found:
+                        curses.beep()
+
             elif key == ord("f"):
-                # First ensure focus is on verses column so j/k navigate verses
                 if self.selected_window[1] is not self.verses_win:
                     self.deactivate_all_windows()
-                    # Set selected window to verses and activate
                     for i, win in self.windows_tuples:
                         if win is self.verses_win:
                             self.selected_window = (i, win)
@@ -334,12 +343,11 @@ class Main:
                 self.sidebars_visible = not self.sidebars_visible
                 self.layout_windows()
 
-            elif key in (10, 13):  # Enter
+            elif key in (10, 13):
                 self._open_in_frogmouth()
 
             self.update_selections()
             self.update_text()
-        # Persist last position on exit
         self._save_position()
 
 

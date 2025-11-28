@@ -22,7 +22,6 @@ class ListWindow:
                 self._bounds = (start, start + self.MAX_ITEMS)
                 self.draw()
                 return
-        # Fallback if value not found
         self.select_first()
 
     def set_active(self, is_active):
@@ -34,7 +33,6 @@ class ListWindow:
 
     def set_selection_tuples(self, item_tuples):
         self._item_tuples = item_tuples or []
-        # Try to preserve selection by value if possible
         prev_val = self._selected_tuple[1]
         if self._item_tuples:
             for i, v in self._item_tuples:
@@ -48,7 +46,6 @@ class ListWindow:
                     return
             self.select_first()
         else:
-            # Empty list: reset selection safely
             self._selected_tuple = (0, "")
             self._bounds = (0, 0)
             self.draw()
@@ -69,7 +66,6 @@ class ListWindow:
         shift = shift_down or shift_up
 
         if shift:
-            # Clamp bounds within [0, len]
             new_lower = max(
                 0, min(bound_lower + i, max(0, len(self._item_tuples) - self.MAX_ITEMS))
             )
@@ -95,6 +91,22 @@ class ListWindow:
             self._selected_tuple = (0, "")
             self._bounds = (0, 0)
         self.draw()
+
+    def search_select(self, query, start_at_current=True):
+        if not self._item_tuples or not query:
+            return False
+        q = str(query).lower()
+        n = len(self._item_tuples)
+        start = self._selected_tuple[0] if start_at_current else 0
+        for off in range(n):
+            i = (start + off) % n
+            if q in str(self._item_tuples[i][1]).lower():
+                self._selected_tuple = self._item_tuples[i]
+                start_bound = max(0, min(i, max(0, n - self.MAX_ITEMS)))
+                self._bounds = (start_bound, start_bound + self.MAX_ITEMS)
+                self.draw()
+                return True
+        return False
 
     def write_title(self):
         self._win.addnstr(
