@@ -277,18 +277,22 @@ class Main:
         except Exception:
             verse_int = 1
 
-        # Build title with grep indicator left of verse number
+        # Build title; put grep indicator fully at left if active
         grep_indicator = ""
         if self._grep_results and self._grep_index >= 0:
             term = self._last_grep or "grep"
             if len(term) > 20:
                 term = term[:20] + "…"
             grep_indicator = (
-                f" ({term} {self._grep_index + 1}/{len(self._grep_results)})"
+                f"({term} {self._grep_index + 1}/{len(self._grep_results)}) "
             )
-        text_title = " {0} {1}{gi}:{3} [{2}]".format(
-            book_name, str(chapter_name[0]), trans_name, verse_int, gi=grep_indicator
-        )
+        # Abbreviate book name for compact title, keep indicator at far left
+        if len(book_name) > 9:
+            # Use first 4 chars + ellipsis for longer names
+            book_display = book_name[:4] + "..."
+        else:
+            book_display = book_name
+        text_title = f" {grep_indicator}{book_display} {chapter_name[0]}:{verse_int} [{trans_name}]"
 
         raw_text = self.reader.get_chapter_text(
             self.books_win.get_selection_tuple()[1],
@@ -307,7 +311,10 @@ class Main:
 
         hint = ""
         if trans_name == "BSB":
-            hint = "\n[Enter]: open current chapter in Frogmouth"
+            base_hint = "[Enter]: open current chapter in Frogmouth"
+            wrap_width = max(1, self.text_width - 3)
+            hint_lines = wrap(base_hint, width=wrap_width)
+            hint = "\n" + "\n".join(hint_lines)
         self.text_win.update_text_title(text_title)
         highlight_terms = []
         if self._grep_results and self._grep_index >= 0 and self._last_grep:
@@ -670,6 +677,30 @@ class Main:
                         item.get("scope_book"),
                         record_history=False,
                     )
+                    # Show formatted, wrapped list for current results
+                    formatted_lines = []
+                    for (
+                        translation,
+                        book,
+                        chapter,
+                        verse,
+                        snippet,
+                    ) in self._grep_results:
+                        cleaned = re.sub(r"<[^>]+>", "", snippet)
+                        formatted_lines.append(
+                            f"{translation} {book} {chapter}:{verse} — {cleaned}"
+                        )
+                    wrap_width = max(1, self.text_width - 3)
+                    wrapped = []
+                    for line in formatted_lines:
+                        for wl in wrap(line, width=wrap_width):
+                            wrapped.append(wl)
+                        wrapped.append("")
+                    text = "\n".join(wrapped) if wrapped else "\n".join(formatted_lines)
+                    self._grep_override_text = text
+                    self._grep_override_title = (
+                        f" GREP /{item['pattern']}/ ({len(formatted_lines)})"
+                    )
             elif key == ord("J"):
                 # Next grep in history
                 if self._grep_history:
@@ -684,6 +715,30 @@ class Main:
                         item.get("scope_translation"),
                         item.get("scope_book"),
                         record_history=False,
+                    )
+                    # Show formatted, wrapped list for current results
+                    formatted_lines = []
+                    for (
+                        translation,
+                        book,
+                        chapter,
+                        verse,
+                        snippet,
+                    ) in self._grep_results:
+                        cleaned = re.sub(r"<[^>]+>", "", snippet)
+                        formatted_lines.append(
+                            f"{translation} {book} {chapter}:{verse} — {cleaned}"
+                        )
+                    wrap_width = max(1, self.text_width - 3)
+                    wrapped = []
+                    for line in formatted_lines:
+                        for wl in wrap(line, width=wrap_width):
+                            wrapped.append(wl)
+                        wrapped.append("")
+                    text = "\n".join(wrapped) if wrapped else "\n".join(formatted_lines)
+                    self._grep_override_text = text
+                    self._grep_override_title = (
+                        f" GREP /{item['pattern']}/ ({len(formatted_lines)})"
                     )
 
             elif key == ord("f"):
