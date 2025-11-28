@@ -113,7 +113,7 @@ class Reader:
         self._current_root = (translation_str, self._roots[translation_str])
 
     def get_translations(self):
-        return list(self._roots.keys())
+        return sorted(self._roots.keys(), key=lambda s: s.upper())
 
     def get_books(self):
         tree = self._current_root[1]
