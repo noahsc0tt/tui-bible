@@ -594,12 +594,55 @@ class Main:
             self._grep_results = []
             self._grep_index = -1
 
+    def _build_grep_pane_text(self):
+        if not self._grep_results:
+            self._grep_override_text = "No matches"
+            self._grep_override_title = " GREP RESULTS (0)"
+            return
+        formatted_lines = []
+        for idx, (translation, book, chapter, verse, snippet) in enumerate(
+            self._grep_results
+        ):
+            cleaned = re.sub(r"<[^>]+>", "", snippet)
+            prefix = ">" if idx == self._grep_pane_index else " "
+            formatted_lines.append(
+                f"{prefix} {translation} {book} {chapter}:{verse} — {cleaned}"
+            )
+        wrap_width = max(1, self.text_width - 3)
+        wrapped = []
+        for line in formatted_lines:
+            for wl in wrap(line, width=wrap_width):
+                wrapped.append(wl)
+            wrapped.append("")
+        text = "\n".join(wrapped) if wrapped else "\n".join(formatted_lines)
+        self._grep_override_text = text
+        title_term = self._last_grep or "grep"
+        self._grep_override_title = f" GREP /{title_term}/ ({len(formatted_lines)})"
+
     def start_input_loop(self):
         key = None
         while key != ord("q"):
             key = self.stdscr.getch()
 
-            if key == curses.KEY_UP or key == ord("k"):
+            if (
+                key == curses.KEY_UP or key == ord("k")
+            ) and self._grep_override_text is not None:
+                if self._grep_results:
+                    self._grep_pane_index = max(0, self._grep_pane_index - 1)
+                    self._build_grep_pane_text()
+                else:
+                    curses.beep()
+            elif (
+                key == curses.KEY_DOWN or key == ord("j")
+            ) and self._grep_override_text is not None:
+                if self._grep_results:
+                    self._grep_pane_index = min(
+                        len(self._grep_results) - 1, self._grep_pane_index + 1
+                    )
+                    self._build_grep_pane_text()
+                else:
+                    curses.beep()
+            elif key == curses.KEY_UP or key == ord("k"):
                 self.selected_window[1].increment_selection(-1)
 
             elif key == curses.KEY_DOWN or key == ord("j"):
@@ -784,36 +827,10 @@ class Main:
                             curses.beep()
 
             elif key == ord("r"):
-                # Open grep results pane for last-run pattern
-                pattern = self._last_grep
-                if not pattern and self._grep_history:
-                    hist = self._grep_history[-1]
-                    pattern = hist.get("pattern")
+                # Open grep results pane (selection with j/k, enter) for last-run pattern
                 if self._grep_results:
-                    formatted_lines = []
-                    for (
-                        translation,
-                        book,
-                        chapter,
-                        verse,
-                        snippet,
-                    ) in self._grep_results:
-                        cleaned = re.sub(r"<[^>]+>", "", snippet)
-                        formatted_lines.append(
-                            f"{translation} {book} {chapter}:{verse} — {cleaned}"
-                        )
-                    wrap_width = max(1, self.text_width - 3)
-                    wrapped = []
-                    for line in formatted_lines:
-                        for wl in wrap(line, width=wrap_width):
-                            wrapped.append(wl)
-                        wrapped.append("")
-                    text = "\n".join(wrapped) if wrapped else "\n".join(formatted_lines)
-                    self._grep_override_text = text
-                    title_term = pattern or "grep"
-                    self._grep_override_title = (
-                        f" GREP /{title_term}/ ({len(formatted_lines)})"
-                    )
+                    self._grep_pane_index = 0
+                    self._build_grep_pane_text()
                 else:
                     curses.beep()
 
@@ -828,6 +845,7 @@ class Main:
                 self._last_grep = ""
                 self._grep_results = []
                 self._grep_index = -1
+                self._grep_pane_index = 0  # selection within grep pane
                 # Keep history but reset active pointer
                 self._grep_history_idx = -1
 
@@ -975,7 +993,15 @@ class Main:
                 self.layout_windows()
 
             elif key in (10, 13):
-                self._open_in_frogmouth()
+                if self._grep_override_text is not None and self._grep_results:
+                    # Activate selected grep result
+                    self._grep_index = self._grep_pane_index
+                    self._jump_to_grep_index(self._grep_index)
+                    # Close pane
+                    self._grep_override_text = None
+                    self._grep_override_title = None
+                else:
+                    self._open_in_frogmouth()
 
             self.update_selections()
             self.update_text()
