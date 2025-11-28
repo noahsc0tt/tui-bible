@@ -1,8 +1,11 @@
 from glob import glob
 from os.path import splitext, basename, dirname, join
+from pathlib import Path
+import re
 import xml.etree.ElementTree as ET
 
 TRANSLATIONS_DIR = join(dirname(__file__), "translations")
+MARKDOWN_DIR = Path(dirname(__file__)) / "markdown" / "BSB"
 
 # Standard 66-book order for mapping numeric-only sources like BSB
 BOOK_ORDER = [
@@ -94,6 +97,10 @@ class Reader:
 
     def _get_root(self, translation_str):
         return ET.parse("{0}/{1}.xml".format(TRANSLATIONS_DIR, translation_str))
+
+    def _build_markdown_tree(self):
+        # Disabled: no markdown-backed translation registration
+        return None
 
     def _is_old_format(self, tree):
         # Old format: <bible><b n="Genesis"><c n="1"><v n="1">...

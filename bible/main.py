@@ -7,6 +7,7 @@ from textwrap import wrap
 import re
 import json
 import os
+from pathlib import Path
 
 from .reader import Reader
 from .textwin import TextWindow
@@ -252,8 +253,12 @@ class Main:
             lines.append("")  # blank line between verses
         text = "\n".join(lines[0 : curses.LINES - 2])
 
+        # Add hint for Frogmouth when on BSB
+        hint = ""
+        if trans_name == "BSB":
+            hint = "\n[Enter]: open current chapter in Frogmouth"
         self.text_win.update_text_title(text_title)
-        self.text_win.update_text(text)
+        self.text_win.update_text(text + hint)
 
     def deactivate_all_windows(self):
         for i, win in self.windows_tuples:
@@ -268,6 +273,30 @@ class Main:
             new_windex = len(self.windows_tuples) - 1
         self.selected_window = self.windows_tuples[new_windex]
         self.selected_window[1].set_active(True)
+
+    def _open_in_frogmouth(self):
+        trans = self.translations_win.get_selection_tuple()[1]
+        if trans != "BSB":
+            return
+        book = self.books_win.get_selection_tuple()[1]
+        chapter = self.chapters_win.get_selection_tuple()[1]
+        # Path: markdown/BSB/<Book>/<chapter>.md (fallback to book index)
+        base = Path(__file__).parent / "markdown" / "BSB" / book
+        md = base / f"{chapter}.md"
+        if not md.exists():
+            md = base / "index.md"
+        if not md.exists():
+            return
+        # Temporarily leave curses to run frogmouth
+        curses.endwin()
+        try:
+            os.system(f"frogmouth '{md}'")
+        finally:
+            # Reinitialize curses screen after returning
+            self.stdscr.refresh()
+            self.layout_windows()
+            self.update_selections()
+            self.update_text()
 
     def start_input_loop(self):
         key = None
@@ -304,6 +333,9 @@ class Main:
                     self.selected_window[1].set_active(True)
                 self.sidebars_visible = not self.sidebars_visible
                 self.layout_windows()
+
+            elif key in (10, 13):  # Enter
+                self._open_in_frogmouth()
 
             self.update_selections()
             self.update_text()
