@@ -64,11 +64,12 @@ class ListWindow:
             self.draw()
 
     def increment_selection(self, i):
+        # Returns True if selection changed, else False
         if not self._item_tuples:
-            return
+            return False
         new_index = self._selected_tuple[0] + i
         if new_index < 0 or new_index >= len(self._item_tuples):
-            return
+            return False
 
         self._selected_tuple = self._item_tuples[new_index]
 
@@ -85,6 +86,7 @@ class ListWindow:
             self._bounds = (new_lower, new_lower + self.MAX_ITEMS)
 
         self.draw()
+        return True
 
     def select_first(self):
         if self._item_tuples:
