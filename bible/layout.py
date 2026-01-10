@@ -15,43 +15,52 @@ CHAPTERS_WIDTH = 6
 VERSES_WIDTH = 6
 
 
-def initialize_windows(app, reader):
+def create_windows(stdscr, reader):
     start_x = 0
-    app.translations_win = ListWindow(
-        app.stdscr.derwin(curses.LINES, TRANSLATIONS_WIDTH, start_x, 0),
+    translations_win = ListWindow(
+        stdscr.derwin(curses.LINES, TRANSLATIONS_WIDTH, start_x, 0),
         "TR",
         list(enumerate(reader.get_translations())),
         TRANSLATIONS_WIDTH,
     )
 
     start_x += TRANSLATIONS_WIDTH
-    app.books_win = ListWindow(
-        app.stdscr.derwin(curses.LINES, BOOKS_WIDTH, 0, start_x),
+    books_win = ListWindow(
+        stdscr.derwin(curses.LINES, BOOKS_WIDTH, 0, start_x),
         "BOOK",
         list(enumerate(reader.get_books())),
         BOOKS_WIDTH,
     )
 
     start_x += BOOKS_WIDTH
-    app.chapters_win = ListWindow(
-        app.stdscr.derwin(curses.LINES, CHAPTERS_WIDTH, 0, start_x),
+    chapters_win = ListWindow(
+        stdscr.derwin(curses.LINES, CHAPTERS_WIDTH, 0, start_x),
         "CH",
         list(enumerate(reader.get_chapters("Genesis"))),
         CHAPTERS_WIDTH,
     )
 
     start_x += CHAPTERS_WIDTH
-    app.verses_win = ListWindow(
-        app.stdscr.derwin(curses.LINES, VERSES_WIDTH, 0, start_x),
+    verses_win = ListWindow(
+        stdscr.derwin(curses.LINES, VERSES_WIDTH, 0, start_x),
         "VS",
         list(enumerate(reader.get_verses("Genesis", 1))),
         VERSES_WIDTH,
     )
 
-    app.text_width = curses.COLS
-    app.text_win = TextWindow(
-        app.stdscr.derwin(curses.LINES, app.text_width, 0, 0),
-        app.text_width,
+    text_width = curses.COLS
+    text_win = TextWindow(
+        stdscr.derwin(curses.LINES, text_width, 0, 0),
+        text_width,
+    )
+
+    return (
+        translations_win,
+        books_win,
+        chapters_win,
+        verses_win,
+        text_win,
+        text_width,
     )
 
 

@@ -8,6 +8,8 @@ from pathlib import Path
 from .reader import Reader
 from .state import State
 from .actions import handle_key
+from .listwin import ListWindow
+from .textwin import TextWindow
 from . import position
 from . import layout
 from . import selection
@@ -46,7 +48,17 @@ class Main:
 
         saved = self.initialize_reader()
         self.state.ui.sidebars_visible = True
-        layout.initialize_windows(self, self.reader)
+
+        # Initialize windows and assign to self
+        (
+            self.translations_win,
+            self.books_win,
+            self.chapters_win,
+            self.verses_win,
+            self.text_win,
+            self.text_width,
+        ) = layout.create_windows(self.stdscr, self.reader)
+
         self.initialize_selections()
         position.apply_position(self, saved)
         layout.layout_windows(self)
@@ -70,7 +82,7 @@ class Main:
         return position.load_last_position(self.reader)
 
     def initialize_selections(self):
-        self.windows_tuples = list(
+        self.windows_tuples: list[tuple[int, ListWindow]] = list(
             enumerate(
                 [
                     self.translations_win,
